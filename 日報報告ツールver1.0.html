@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>報告カウントツール</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background: #f0f2f5; padding: 10px; font-size: 16px; color: #333; margin-bottom: 250px;
+        }
+        .section { background: white; padding: 15px; margin-bottom: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        h3 { border-left: 5px solid #1a73e8; padding-left: 10px; margin: 0 0 15px 0; font-size: 16px; color: #1a73e8; }
+        .item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
+        .item:last-child { border-bottom: none; }
+        .item-label { font-weight: bold; flex: 1; font-size: 14px; }
+        .controls { display: flex; align-items: center; gap: 8px; }
+        button { width: 44px; height: 44px; font-weight: bold; cursor: pointer; border: 1px solid #ccc; background: #f8f9fa; border-radius: 8px; font-size: 18px; touch-action: manipulation; }
+        button:active { background: #e8eaed; }
+        .count-input { width: 60px; height: 40px; text-align: center; border: 1px solid #ddd; border-radius: 6px; font-size: 18px; font-weight: bold; color: #1a73e8; background: #fff; }
+        
+        #preview-area { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; padding: 15px; box-shadow: 0 -4px 10px rgba(0,0,0,0.1); z-index: 100; border-top: 3px solid #1a73e8; }
+        textarea { width: 100%; height: 80px; margin-top: 8px; font-size: 14px; border: 1px solid #ddd; border-radius: 8px; padding: 8px; box-sizing: border-box; background: #fdfdfd; display: none; }
+        .btn-main { width: 100%; height: 50px; background: #1a73e8; color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 17px; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="section">
+        <h3 id="display-date">報告内容</h3>
+        
+        <div id="main-items"></div>
+    </div>
+
+    <div class="section">
+        <h3>サードパーティ / 備品</h3>
+        <div id="sub-items"></div>
+    </div>
+
+    <div class="section">
+        <h3>来客数</h3>
+        <div id="visitor-items"></div>
+    </div>
+
+    <div class="section">
+        <h3>＊楽天ひかり申込内訳</h3>
+        <div id="hikari-items"></div>
+    </div>
+
+    <div id="preview-area">
+        <button class="btn-main" onclick="copyReport()">レポートをコピーする</button>
+        <textarea id="report_text" readonly></textarea>
+    </div>
+
+<script>
+    // 項目設定
+    const config = {
+        main: [
+            { id: 'shinki', name: '新規発番' },
+            { id: 'mnp', name: 'MNP' },
+            { id: 'kikan', name: '機種変更' },
+            { id: 'hikari', name: '楽天ひかり' },
+            { id: 'turbo', name: 'Turbo' },
+            { id: 'card', name: 'カード' },
+            { id: 'nw_opt', name: 'NWオプション' },
+            { id: 'iphone', name: 'iPhone販売数' }
+        ],
+        sub: [
+            { id: 'adguard', name: 'ADGUARD' },
+            { id: 'kodomamo', name: 'こどマモ' },
+            { id: 'pedal', name: 'あんしんペダル' },
+            { id: 'easy', name: 'イイジー' },
+            { id: 'oppo', name: 'OPPO充電器販売' }
+        ],
+        visitor: [
+            { id: 'guest_group', name: '客数', unit: '組' },
+            { id: 'guest_num', name: '人数', unit: '人' }
+        ],
+        hikari_detail: [
+            { id: 'h_shinki', name: '新規' },
+            { id: 'h_jihen', name: '事変' },
+            { id: 'h_tenyo', name: '転用' }
+        ]
+    };
+
+    // 日付のセット
+    const now = new Date();
+    const dateStr = `【${now.getMonth() + 1}月${now.getDate()}日させぼ五番街店】`;
+    document.getElementById('display-date').innerText = dateStr;
+
+    // HTML生成
+    function createItems(items, containerId) {
+        const container = document.getElementById(containerId);
+        items.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'item';
+            div.innerHTML = `
+                <span class="item-label">${item.name}</span>
+                <div class="controls">
+                    <button onclick="changeVal('${item.id}', -1)">-</button>
+                    <input type="number" id="${item.id}" value="0" class="count-input">
+                    <button onclick="changeVal('${item.id}', 1)">+</button>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    createItems(config.main, 'main-items');
+    createItems(config.sub, 'sub-items');
+    createItems(config.visitor, 'visitor-items');
+    createItems(config.hikari_detail, 'hikari-items');
+
+    // カウントアップ・ダウン
+    window.changeVal = function(id, v) {
+        const el = document.getElementById(id);
+        let val = parseInt(el.value) || 0;
+        el.value = Math.max(0, val + v);
+    };
+
+    // レポート生成・コピー
+    window.copyReport = function() {
+        const getVal = (id) => document.getElementById(id).value || 0;
+        
+        let report = `${dateStr}\n\n`;
+        
+        config.main.forEach(item => {
+            const unit = item.name.includes('販売数') ? '台' : '件';
+            report += `${item.name}　　 ${getVal(item.id)}${unit}\n`;
+        });
+        
+        report += `\n`;
+        config.sub.forEach(item => {
+            report += `${item.name}　　${getVal(item.id)}件\n`;
+        });
+
+        report += `\n`;
+        config.visitor.forEach(item => {
+            report += `${item.name}　　　${getVal(item.id)}${item.unit}\n`;
+        });
+
+        report += `\n＊楽天ひかり申込内訳\n`;
+        config.hikari_detail.forEach(item => {
+            report += `${item.name}　　${getVal(item.id)}件\n`;
+        });
+
+        const textarea = document.getElementById('report_text');
+        textarea.value = report;
+        textarea.style.display = 'block';
+        textarea.select();
+        document.execCommand('copy');
+        
+        alert("コピーしました！\nそのまま貼り付けられます。");
+    };
+</script>
+</body>
+</html>
